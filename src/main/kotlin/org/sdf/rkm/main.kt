@@ -27,18 +27,17 @@ class DemoApplication {
     fun commandLineRunner(ctx: ApplicationContext, limiter: ConcurrentRequestLimiter): CommandLineRunner {
         return CommandLineRunner {
             val retryPolicy = RetryPolicy().retryIf<Baton>(Predicate { !it.hasAcquired() })
-                    .withBackoff(1, 30, TimeUnit.SECONDS)
+                    .withBackoff(1, 30, TimeUnit.SECONDS).withJitter(.25)
                     .withMaxRetries(10)
             runBlocking {
                 val job = async(CommonPool) {
-                    IntRange(1, 10).forEach {
+                    IntRange(1, 20).forEach {
                         val baton = Failsafe.with<Baton>(retryPolicy)
                                 .onRetriesExceeded { _, _ -> System.err.println("Failed to connect. Max retries exceeded.") }
                                 .get(Callable<Baton> { limiter.acquire("test") })
 
                         baton.doAction {
                             "https://now.httpbin.org/".httpGet().responseString { _, _, result ->
-                                //do something with response
                                 when (result) {
                                     is Result.Failure -> {
                                         System.err.println("$it: ${result.error.response.data}")
@@ -64,7 +63,7 @@ class DemoApplication {
     @Bean
     fun concurrentLimitRule(): ConcurrentLimitRule {
         // int concurrentLimit, TimeUnit timeOutUnit, long timeOut
-        return ConcurrentLimitRule.of(5, TimeUnit.SECONDS, 1)
+        return ConcurrentLimitRule.of(4, TimeUnit.SECONDS, 1)
     }
 
     @Bean
